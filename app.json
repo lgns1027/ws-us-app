@@ -2,7 +2,7 @@
   "expo": {
     "name": "WE US",
     "slug": "we-us-app",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -24,7 +24,7 @@
         "backgroundColor": "#111827"
       },
       "package": "online.weus.app",
-      "versionCode": 2
+      "versionCode": 3
     },
     "web": {
       "favicon": "./assets/favicon.png"
