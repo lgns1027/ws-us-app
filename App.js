@@ -3,16 +3,19 @@ import { StyleSheet, StatusBar, View, Text, TouchableOpacity, BackHandler, AppSt
 import { WebView } from 'react-native-webview';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
-import { InterstitialAd, AdEventType, BannerAd, BannerAdSize } from 'react-native-google-mobile-ads';
+// ★ 보상형 광고(RewardedAd) Import 추가
+import { InterstitialAd, AdEventType, BannerAd, BannerAdSize, RewardedAd, RewardedAdEventType } from 'react-native-google-mobile-ads';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 
 const INTERSTITIAL_AD_UNIT_ID = 'ca-app-pub-2627794215633228/9770283736';
 const BANNER_AD_UNIT_ID = 'ca-app-pub-2627794215633228/7482464492';
+// ★ 신규: 대표님이 주신 보상형 광고 ID 추가
+const REWARDED_AD_UNIT_ID = 'ca-app-pub-2627794215633228/3785261636';
 
-const interstitial = InterstitialAd.createForAdRequest(INTERSTITIAL_AD_UNIT_ID, {
-  requestNonPersonalizedAdsOnly: true,
-});
+// ★ eCPM 단가 하락의 주범이었던 requestNonPersonalizedAdsOnly 속성 삭제 (수익률 펌핑)
+const interstitial = InterstitialAd.createForAdRequest(INTERSTITIAL_AD_UNIT_ID, {});
+const rewarded = RewardedAd.createForAdRequest(REWARDED_AD_UNIT_ID, {});
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -24,6 +27,9 @@ Notifications.setNotificationHandler({
 
 export default function App() {
   const [adLoaded, setAdLoaded] = useState(false);
+  // ★ 신규: 보상형 광고 로드 상태 추가
+  const [rewardedLoaded, setRewardedLoaded] = useState(false);
+  
   const [canGoBack, setCanGoBack] = useState(false);
   const [expoPushToken, setExpoPushToken] = useState('');
   
@@ -67,6 +73,9 @@ export default function App() {
   }, [expoPushToken]);
 
   useEffect(() => {
+    // ------------------------------------
+    // 전면 광고 이벤트 세팅
+    // ------------------------------------
     const unsubscribeLoaded = interstitial.addAdEventListener(AdEventType.LOADED, () => {
       setAdLoaded(true);
     });
@@ -77,6 +86,30 @@ export default function App() {
     });
 
     interstitial.load();
+
+    // ------------------------------------
+    // ★ 신규: 보상형 광고 이벤트 세팅
+    // ------------------------------------
+    const unsubscribeRewardedLoaded = rewarded.addAdEventListener(RewardedAdEventType.LOADED, () => {
+      setRewardedLoaded(true);
+    });
+
+    const unsubscribeRewardedEarned = rewarded.addAdEventListener(RewardedAdEventType.EARNED_REWARD, reward => {
+      // 광고를 다 봤을 때 프론트엔드(웹뷰) 쪽에 '보상 지급해라'는 신호를 쏨
+      if (webViewRef.current) {
+        webViewRef.current.injectJavaScript(`
+          window.dispatchEvent(new Event('REWARD_EARNED'));
+          true;
+        `);
+      }
+    });
+
+    const unsubscribeRewardedClosed = rewarded.addAdEventListener(AdEventType.CLOSED, () => {
+      setRewardedLoaded(false);
+      rewarded.load(); // 닫히면 바로 다음 보상형 광고 미리 로드
+    });
+
+    rewarded.load();
 
     const backAction = () => {
       // 1. 웹뷰 내부에 뒤로 갈 페이지가 있으면 뒤로 가기
@@ -103,6 +136,9 @@ export default function App() {
     return () => {
       unsubscribeLoaded();
       unsubscribeClosed();
+      unsubscribeRewardedLoaded();
+      unsubscribeRewardedEarned();
+      unsubscribeRewardedClosed();
       backHandler.remove();
       subscription.remove();
     };
@@ -110,8 +146,14 @@ export default function App() {
 
   const onWebViewMessage = (event) => {
     const message = event.nativeEvent.data;
+    
+    // 전면 광고 호출 신호
     if (message === 'SHOW_ADMOB_AD') {
       if (adLoaded) interstitial.show();
+    }
+    // ★ 신규: 보상형 광고 호출 신호
+    else if (message === 'SHOW_REWARDED_AD') {
+      if (rewardedLoaded) rewarded.show();
     }
   };
 
@@ -153,10 +195,10 @@ export default function App() {
               
               {/* 팝업 중앙에 배너 광고 배치 */}
               <View style={styles.modalBanner}>
+                {/* ★ 배너 광고도 단가를 높이기 위해 requestOptions 속성 삭제 */}
                 <BannerAd
                   unitId={BANNER_AD_UNIT_ID}
                   size={BannerAdSize.MEDIUM_RECTANGLE} // 모달창에 맞는 큰 직사각형 배너
-                  requestOptions={{ requestNonPersonalizedAdsOnly: true }}
                 />
               </View>
 
@@ -241,4 +283,5 @@ const styles = StyleSheet.create({
   modalBtnTextExit: {
     color: '#fca5a5',
   },
+  
 });
